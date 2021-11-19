@@ -1,0 +1,112 @@
+2021-10-20 09:54:10
+
+The Grackle Version 3.2.dev2
+Git Branch   master
+Git Revision 8087b4d9b7a1ff657b53d90808d821c5f17bec88
+
+Grackle build options:
+
+   MACHINE: Use apt-get to install csh libhdf5-serial-dev gfortran
+   MACHINE-NAME: linux-gnu
+
+   CONFIG_PRECISION  [precision-{32,64}]                     : 64
+   CONFIG_OPT  [opt-{warn,debug,high,aggressive}]            : debug
+   CONFIG_OMP  [omp-{on,off}]                                : on
+
+Grackle build flags:
+
+Usage: which [options] [--] COMMAND [...]
+Write the full path of COMMAND(s) to standard output.
+
+  --version, -[vV] Print version and exit successfully.
+  --help,          Print this help and exit successfully.
+  --skip-dot       Skip directories in PATH that start with a dot.
+  --skip-tilde     Skip directories in PATH that start with a tilde.
+  --show-dot       Don't expand a dot to current directory in output.
+  --show-tilde     Output a tilde for HOME directory for non-root.
+  --tty-only       Stop processing options on the right if not on tty.
+  --all, -a        Print all matches in PATH, not just the first
+  --read-alias, -i Read list of aliases from stdin.
+  --skip-alias     Ignore option --read-alias; don't read stdin.
+  --read-functions Read shell functions from stdin.
+  --skip-functions Ignore option --read-functions; don't read stdin.
+
+Recommended use is to write the output of (alias; declare -f) to standard
+input, so that which can show aliases and shell functions. See which(1) for
+examples.
+
+If the options --read-alias and/or --read-functions are specified then the
+output can be a full alias or function definition, optionally followed by
+the full path of each command used inside of those.
+
+Report bugs to <which-bugs@gnu.org>.
+CPP = 
+CC  = /home/kwoksun2/anaconda3/envs/gcc_env/bin/x86_64-conda-linux-gnu-gcc
+CXX = /home/kwoksun2/anaconda3/envs/gcc_env/bin/x86_64-conda-linux-gnu-g++
+FC  = /usr/bin/gfortran
+F90 = /usr/bin/gfortran
+LD  = /home/kwoksun2/anaconda3/envs/gcc_env/bin/x86_64-conda-linux-gnu-gcc
+LIBTOOL = /home/kwoksun2/anaconda3/envs/gcc_env/bin/libtool
+
+DEFINES = -DLINUX -DH5_USE_16_API -fPIC  -DCONFIG_BFLOAT_8
+
+INCLUDES = -I/home/kwoksun2/anaconda3/include     -I.
+
+CPPFLAGS = -P -traditional
+CFLAGS   =  -g -fopenmp 
+CXXFLAGS =  -g -fopenmp 
+FFLAGS   = -fno-second-underscore -ffixed-line-length-132 -g -fopenmp 
+F90FLAGS = -fno-second-underscore -g -fopenmp 
+LDFLAGS  =  
+
+LIBS     = -L/home/kwoksun2/anaconda3/lib -lhdf5 -lz  -lgfortran 
+
+Grackle run-time parameters:
+use_grackle                       = 1
+with_radiative_cooling            = 1
+primordial_chemistry              = 3
+dust_chemistry                    = 0
+metal_cooling                     = 0
+UVbackground                      = 0
+grackle_data_file                 = CloudyData_UVB=HM2012.h5
+cmb_temperature_floor             = 1
+Gamma                             = 1.66667
+h2_on_dust                        = 0
+use_dust_density_field            = 0
+photoelectric_heating             = 0
+photoelectric_heating_rate        = 8.5e-26
+use_isrf_field                    = 0
+interstellar_radiation_field      = 1.7
+use_volumetric_heating_rate       = 0
+use_specific_heating_rate         = 0
+three_body_rate                   = 0
+cie_cooling                       = 0
+h2_optical_depth_approximation    = 0
+ih2co                             = 1
+ipiht                             = 1
+HydrogenFractionByMass            = 0.76
+DeuteriumToHydrogenRatio          = 6.8e-05
+SolarMetalFractionByMass          = 0.01295
+local_dust_to_gas_ratio           = 0.009387
+NumberOfTemperatureBins           = 600
+CaseBRecombination                = 0
+TemperatureStart                  = 1
+TemperatureEnd                    = 1e+09
+NumberOfDustTemperatureBins       = 250
+DustTemperatureStart              = 1
+DustTemperatureEnd                = 1500
+Compton_xray_heating              = 0
+LWbackground_sawtooth_suppression = 0
+LWbackground_intensity            = 0
+UVbackground_redshift_on          = -99999
+UVbackground_redshift_off         = -99999
+UVbackground_redshift_fullon      = -99999
+UVbackground_redshift_drop        = -99999
+cloudy_electron_fraction_factor   = 0.00915396
+use_radiative_transfer            = 0
+radiative_transfer_coupled_rate_solver = 0
+radiative_transfer_intermediate_step = 0
+radiative_transfer_hydrogen_only  = 0
+self_shielding_method             = 0
+H2_self_shielding                 = 0
+omp_nthreads                      = 40

@@ -1,0 +1,23 @@
+#NC          = # of cells in each grid
+#NI          = # of iterations for estimating the average performance
+#NT          = # of OpenMP threads
+
+#Cool        = cooling
+#Time        = cooling time
+#Temp        = temperature
+#Pres        = pressure
+#Gama        = ratio of specific heat (gamma)
+#Dust        = dust temperature
+#Ratio       = multi-thread performance / single-thread performance
+
+#T/C         = for tabulated / 12-species chemistry network
+#_t1/_tN     = single-/multi-thread performance in [# of cells / sec]
+
+#Precision   = double
+#Density     = 1.6700000e-24 g/cm^3
+#Temperature = 1.0000000e+03 K
+#====================================================================================================
+
+#    NC   NI   NT  CoolT_t1  CoolT_tN     Ratio  TimeT_t1  TimeT_tN     Ratio  TempT_t1  TempT_tN     Ratio  PresT_t1  PresT_tN     Ratio  CoolC_t1  CoolC_tN     Ratio  TimeC_t1  TimeC_tN     Ratio  TempC_t1  TempC_tN     Ratio  PresC_t1  PresC_tN     Ratio  GamaC_t1  GamaC_tN     Ratio  DustC_t1  DustC_tN     Ratio
+   4096   10   40  2.02e+04  2.25e+05  1.12e+01  1.96e+06  2.50e+07  1.27e+01  1.12e+07  1.22e+07  1.09e+00  1.59e+07  1.89e+07  1.19e+00  3.17e+03  4.94e+04  1.56e+01  1.87e+06  7.38e+06  3.95e+00  1.19e+07  1.27e+07  1.07e+00  1.64e+07  1.04e+07  6.38e-01  9.49e+06  9.13e+06  9.63e-01  1.37e+10  4.10e+10  3.00e+00
+   4096   10   40  2.01e+04  2.35e+05  1.17e+01  1.97e+06  2.67e+07  1.35e+01  1.14e+07  1.22e+07  1.07e+00  1.59e+07  2.76e+06  1.74e-01  3.13e+03  4.80e+04  1.53e+01  1.88e+06  2.30e+07  1.23e+01  1.19e+07  5.59e+06  4.71e-01  1.63e+07  1.02e+07  6.25e-01  9.52e+06  6.49e+06  6.82e-01  1.37e+10       inf       inf
