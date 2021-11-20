@@ -1,0 +1,16 @@
+name: myenv
+channels:
+  - defaults
+dependencies:
+  - ipython
+  - python=3.9
+  - cpuonly
+  - torchvision
+  - pytorch
+  - torchaudio
+  - sysroot_linux-64=2.17
+  - gcc_linux-64=7.5
+  - gxx_linux-64=7.5
+  - lapack
+  - cmake
+prefix: /home/kwoksun2/anaconda3/envs/myenv
