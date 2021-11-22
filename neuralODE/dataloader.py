@@ -13,7 +13,8 @@ class H5ODEDataset(Dataset):
     def __init__(self, filename, len_time=100, normalize_abundance=False):
         self.filename = filename
         self.len_time = len_time
-        self.sp_names = self.get_species_name()
+        #self.sp_names = self.get_species_name()
+        self.sp_names = ['H2I', 'H2II', 'HI', 'HII', 'HM', 'HeI', 'HeII', 'HeIII', 'de', 'ge']
         self.length   = self.get_length()
         self.nspecies = len(self.sp_names)
         self.taxis, self.dtf, self.endindex = self.get_timeaxis()
@@ -28,7 +29,7 @@ class H5ODEDataset(Dataset):
 
     def get_length(self):
         with h5py.File(self.filename, 'r') as f:
-            data_length = f['ge_path'].shape[0] // self.len_time
+            data_length = f['data_group'].shape[0]
         return int(data_length)
 
     def get_timeaxis(self):

@@ -179,8 +179,10 @@ class PlainDecoder(torch.nn.Module):
 
         self.net = MLP(latent_dim, nhidden, output_size, nlayers=nlayers, activation_fn = activation_fn)
 
-        self.mean = torch.from_numpy(data_mean)
-        self.std  = torch.from_numpy(data_std)
+        self.register_buffer('mean', torch.from_numpy(data_mean))
+        self.register_buffer('std',  torch.from_numpy(data_std))
+        #self.mean = torch.from_numpy(data_mean)
+        #self.std  = torch.from_numpy(data_std)
 
     def log_normalize(self,x):
         return (torch.log10(x) - self.mean) / self.std
@@ -203,8 +205,10 @@ class Decoder(torch.nn.Module):
 
         self.net = MLP(latent_dim, nhidden, output_size, nlayers=nlayers, activation_fn = activation_fn)
 
-        self.mean = torch.from_numpy(data_mean)
-        self.std  = torch.from_numpy(data_std)
+        self.register_buffer('mean', torch.from_numpy(data_mean))
+        self.register_buffer('std',  torch.from_numpy(data_std))
+        #self.mean = torch.from_numpy(data_mean)
+        #self.std  = torch.from_numpy(data_std)
         self.scaling_factor = nn.Parameter(torch.zeros(output_size))
 
     def log_normalize(self,x):
@@ -224,8 +228,10 @@ class Encoder(torch.nn.Module):
         super(Encoder, self).__init__()
 
         self.net = MLP(input_size, nhidden, latent_dim, nlayers=nlayers, activation_fn = activation_fn)
-        self.mean = torch.from_numpy(data_mean)
-        self.std  = torch.from_numpy(data_std)
+        self.register_buffer('mean', torch.from_numpy(data_mean))
+        self.register_buffer('std',  torch.from_numpy(data_std))
+        #self.mean = torch.from_numpy(data_mean)
+        #self.std  = torch.from_numpy(data_std)
 
     def log_normalize(self,x):
         return (torch.log10(x) - self.mean) / self.std

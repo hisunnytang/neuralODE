@@ -5,20 +5,31 @@ import numpy as np
 
 import torch.nn as nn
 
+
 class Encoder(torch.nn.Module):
     def __init__(self, input_size, nhidden, latent_dim, data_mean, data_std, nlayers=3, activation_fn='Tanh'):
         super(Encoder, self).__init__()
 
         self.net = MLP(input_size, nhidden, latent_dim, nlayers=nlayers, activation_fn = activation_fn)
-        self.mean = torch.from_numpy(data_mean)
-        self.std  = torch.from_numpy(data_std)
+        self.register_buffer('mean', torch.from_numpy(data_mean))
+        self.register_buffer('std',  torch.from_numpy(data_std))
+        #self.mean = torch.from_numpy(data_mean)
+        #self.std  = torch.from_numpy(data_std),
+        clip_value = 0.1
+        for p in self.parameters():
+            p.register_hook(lambda grad: torch.clamp(grad, -clip_value, clip_value))
 
     def log_normalize(self,x):
         return (torch.log10(x) - self.mean) / self.std
 
     def forward(self, x):
         norm_data = self.log_normalize(x)
+        if any([torch.isnan(p).any() for p in self.parameters()]):
+            for p in self.parameters():
+                if torch.isnan(p).any():
+                    print("failed param", p.shape, p)
         return self.net(norm_data)
+
 
 class PlainDecoder(torch.nn.Module):
     """Decoder maps latent state to the actual observations
@@ -27,13 +38,16 @@ class PlainDecoder(torch.nn.Module):
     We constraint the decoder to output positive definite output
 
     """
-    def __init__(self, latent_dim, nhidden, output_size, data_mean, data_std, nlayers=3, activation_fn='Tanh'):
+    def __init__(self, latent_dim, nhidden, output_size, data_mean, data_std,
+                 nlayers=3, activation_fn='Tanh', **kwargs):
         super(PlainDecoder, self).__init__()
 
         self.net = MLP(latent_dim, nhidden, output_size, nlayers=nlayers, activation_fn = activation_fn)
 
-        self.mean = torch.from_numpy(data_mean)
-        self.std  = torch.from_numpy(data_std)
+        self.register_buffer('mean', torch.from_numpy(data_mean))
+        self.register_buffer('std',  torch.from_numpy(data_std))
+        #self.mean = torch.from_numpy(data_mean)
+        #self.std  = torch.from_numpy(data_std)
 
     def log_normalize(self,x):
         return (torch.log10(x) - self.mean) / self.std
@@ -60,8 +74,10 @@ class Decoder(torch.nn.Module):
 
         self.net = MLP(latent_dim, nhidden, output_size, nlayers=nlayers, activation_fn = activation_fn)
 
-        self.mean = torch.from_numpy(data_log_mean)
-        self.std  = torch.from_numpy(data_log_std)
+        self.register_buffer('mean', torch.from_numpy(data_log_mean))
+        self.register_buffer('std',  torch.from_numpy(data_log_std))
+        #self.mean = torch.from_numpy(data_log_mean)
+        #self.std  = torch.from_numpy(data_log_std)
         self.scaling_factor = nn.Parameter(torch.zeros(output_size))
 
 
@@ -72,13 +88,23 @@ class Decoder(torch.nn.Module):
 
         # no log-normalize
         if data_mean is None:
-            self._mean = torch.zeros(output_size)
-            self._std  = torch.ones(output_size)
-            self._mask = torch.ones(output_size)
+            self.register_buffer('_mean', torch.zeros(output_size))
+            self.register_buffer('_std', torch.ones(output_size))
+            self.register_buffer('_mask', torch.zeros(output_size))
+
+            #self._mean = torch.zeros(output_size)
+            #self._std  = torch.ones(output_size)
+            #self._mask = torch.ones(output_size)
         else:
-            self._mean = torch.from_numpy(data_mean)
-            self._std  = torch.from_numpy(data_std)
-            self._mask = torch.from_numpy(data_mask)
+            self.register_buffer('_mean', torch.from_numpy(data_mean))
+            self.register_buffer('_std', torch.from_numpy(data_std))
+            self.register_buffer('_mask', torch.from_numpy(data_mask))
+            #self._mean = torch.from_numpy(data_mean)
+            #self._std  = torch.from_numpy(data_std)
+            #self._mask = torch.from_numpy(data_mask)
+        clip_value = 0.1
+        for p in self.parameters():
+            p.register_hook(lambda grad: torch.clamp(grad, -clip_value, clip_value))
 
     def normalize(self, x):
         return (x - self._mean) / self._std
@@ -90,6 +116,10 @@ class Decoder(torch.nn.Module):
         return torch.pow(10, x* self.std + self.mean)
 
     def forward(self, z, z0, x0):
+        if any([torch.isnan(p).any() for p in self.parameters()]):
+            for p in self.parameters():
+                if torch.isnan(p).any():
+                    print("decoder failed param", p.shape, p)
         pos_output = self.net( torch.cat((z,z0,self.log_normalize(x0)),dim=-1 ))
         return self.map_to_abundance(pos_output, x0)
 
@@ -100,8 +130,9 @@ class Decoder(torch.nn.Module):
             s_fac = scaling_factor.exp().view(1, -1)
         exp_out = x0 * torch.exp(net_output * s_fac)
         # need to clip it such that it is bounded below from 0
-        lin_out = torch.relu(x0 + net_output * s_fac) + 1e-10
-        return exp_out * (1 - self._mask) + lin_out* self._mask
+        #lin_out = torch.relu(x0 + net_output * s_fac) + 1e-10
+        lin_out = torch.relu( 0.76 - torch.exp(net_output * s_fac )) + 1e-10
+        return exp_out #* (1 - self._mask) + lin_out* self._mask
 
 class PlainAutoEncoder(torch.nn.Module):
     def __init__(self, latent_dim, input_dim, nhidden, data_mean, data_std, nlayers=3, activation_fn='ELU'):
@@ -189,9 +220,9 @@ class ICGuided_HierarchicalAutoEncoder(torch.nn.Module):
 
         # no log-normalize
         if data_mean is None:
-            self._mean = torch.zeros(input_size)
-            self._std  = torch.ones(input_size)
-            self._mask = torch.ones(input_size)
+            self._mean = torch.zeros(input_dim)
+            self._std  = torch.ones(input_dim)
+            self._mask = torch.ones(input_dim)
         else:
             self._mean = torch.from_numpy(data_mean)
             self._std  = torch.from_numpy(data_std)
