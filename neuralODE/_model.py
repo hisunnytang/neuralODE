@@ -29,9 +29,11 @@ class NewLatentODEfunc(nn.Module):
         self.autoencoder = AE[ae_type](latent_dim, nspecies,
                                         nhidden,
                                         log_mean, log_std,
-                                        nlayers,
-                                        activation_fn,
-                                        data_mean, data_std, data_mask)
+                                        nlayers=nlayers,
+                                        activation_fn=activation_fn,
+                                        data_mean=data_mean,
+                                        data_std=data_std,
+                                        data_mask=data_mask)
 
 
         self.rhs_func = ODEFunc(latent_dim,
@@ -79,13 +81,31 @@ class NewLatentODEfunc(nn.Module):
         z0     = self.encode_initial_condition(x0)
         z_path = self.integrate_ODE(t[0], z0)
         x_pred = self.decode_path(z_path, z0, x0)
-
         real_x = self.autoencoder.enc.log_normalize(x.reshape(-1,self.nspecies))
         pred_x = self.autoencoder.enc.log_normalize(x_pred.reshape(-1,self.nspecies))
         loss_path = ((pred_x -real_x)).abs().mean()
 
         loss_recon = self.reconstruction_loss(x, x0, z0)
         return x_pred, loss_path, loss_recon
+
+    def forward_time_batch(self, t, x0, X_truth, obs_indx, taxis_indx):
+        z0     = self.encode_initial_condition(x0)
+        z_path = self.integrate_ODE(t, z0)
+        x_pred = self.decode_path(z_path, z0, x0)
+        xpred_sort = x_pred[obs_indx,:, taxis_indx]
+
+        # optimize the loss in the log-normalize space
+        real_x = self.autoencoder.enc.log_normalize(X_truth)
+        pred_x = self.autoencoder.enc.log_normalize(xpred_sort)
+        loss_path = ((pred_x - real_x)).abs().mean()
+
+        # now reconstruction loss
+        reconstruc_x = self.autoencoder(X_truth)
+        loss_recon =  ((self.autoencoder.enc.log_normalize(reconstruct_x) - real_x)).abs().mean()
+        return xpred_sort, loss_path, loss_recon
+
+
+
 
     def plot_example(self,t, X, savefig=None):
         f,axes = plt.subplots(2,5,figsize=(20,10))
