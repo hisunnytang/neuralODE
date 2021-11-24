@@ -9,7 +9,7 @@ import time
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
-from torch.utils.data import Dataset, DataLoader, Subset, WeightedRandomSampler
+from torch.utils.data import Dataset, DataLoader, Subset, WeightedRandomSampler, ConcatDataset
 from sklearn.model_selection import train_test_split
 from numpy.random import default_rng
 
@@ -61,6 +61,55 @@ def get_default_hyperparams():
     hyperparams['run_avg_beta']    = 0.99
     hyperparams['normalize_abundance'] = True
     return hyperparams
+
+def prepare_concat_dataloaders(dataname=['new_dd0053_chemistry_5.hdf5'], 
+                           train_proportion=0.1, 
+                           batch_size=128, 
+                           num_workers=40, 
+                           sample_score_file=None, 
+                           normalize_abundance=True):
+    assert 0 < train_proportion  <= 1, 'proportion of training data is bound betwen 0,1'
+    RNG_SEED=42
+    rng = default_rng(RNG_SEED)
+
+    ds_list = [H5ODEDataset(d, normalize_abundance=normalize_abundance) for d in dataname]
+    ds = ConcatDataset(ds_list)
+    
+    nsamples = int( len(ds)* train_proportion )
+    subset_indexes = rng.choice(len(ds),nsamples)
+
+    idx_train, idx_val_test = train_test_split(subset_indexes, test_size=0.2, random_state=RNG_SEED)
+    idx_val  , idx_test     = train_test_split(idx_val_test, test_size=0.5, random_state=RNG_SEED)
+
+    ds_train = Subset(ds, idx_train)
+    ds_val   = Subset(ds, idx_val)
+    ds_test  = Subset(ds, idx_test)
+
+    # select the weights from idx
+    # score is the output log p(x)
+    if sample_score_file is not None:
+        score = torch.load(sample_score_file)
+        assert len(score) == len(ds), f"weight file {sample_weight_file} should have the same number of datapoints as dataset {h5filename}"
+        train_score   = torch.from_numpy(score[idx_train])
+        weights = torch.maximum( torch.exp(-0.01*train_score), torch.tensor([1e-3]) )
+        train_sampler = WeightedRandomSampler(weights, len(idx_train))
+        shuffle= False
+    else:
+        train_sampler = None
+        shuffle = True
+
+
+    dl_train = DataLoader(ds_train, batch_size=batch_size, 
+                          shuffle=shuffle, num_workers=num_workers, 
+                          sampler=train_sampler, collate_fn=collate_multi_paths)
+    dl_test  = DataLoader(ds_test,  batch_size=batch_size, 
+                          shuffle=False, num_workers=num_workers, 
+                          collate_fn=collate_multi_paths)
+    dl_val  = DataLoader(ds_val,  batch_size=batch_size, 
+                         shuffle=False, num_workers=num_workers, 
+                         collate_fn=collate_multi_paths)
+
+    return dl_train, dl_test, dl_val
 
 def prepare_dataset(dataname='new_dd0053_chemistry_5.hdf5', train_proportion=0.1, batch_size=128, num_workers=40, sample_score_file=None, normalize_abundance=True):
     assert 0 < train_proportion  <= 1, 'proportion of training data is bound betwen 0,1'
@@ -146,3 +195,30 @@ def plot_example(model, t, X, index=None, nlines=6, axes=None, field="data"):
         plt.tight_layout()
     return axes
 
+
+def collate_multi_paths(data):
+    tiny = 1e-10
+    ts, Xs = zip(*data)
+    
+    Xall = torch.stack(Xs)
+    tall = torch.stack(ts)
+    
+    bsz, nspecies, ntime = Xall.shape
+    
+    tflat = tall.flatten()
+    tindx = torch.argsort(tflat)
+    tunique = torch.unique(tflat)
+
+    # where each observations is at on its 'original time axis' [0:74]
+    taxis_indx = torch.from_numpy(np.digitize(tflat, tunique-tiny))[tindx]-1
+    # time ordered observations index
+    obs_indx = torch.tensor([[i]*ntime for i in range(bsz)]).flatten()[tindx]
+    
+    # batch ground truths, 
+    # time ordered with interwinding observations over different batch element
+    # the corresponding actual observeed batch index is given by obs_indx
+    X_truth = Xall.permute(0,2,1).reshape(-1,10)[tindx]
+    
+    X0 = Xall[:,:,0]
+    
+    return tunique, X0, X_truth, obs_indx, taxis_indx
