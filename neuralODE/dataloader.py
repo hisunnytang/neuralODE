@@ -6,21 +6,30 @@ from random import Random
 import torch.distributed as dist
 from torch.multiprocessing import Process
 import os
+import atexit
 
 # https://tuni-itc.github.io/wiki/Technical-Notes/Distributed_dataparallel_pytorch/
 # https://discuss.pytorch.org/t/dataloader-when-num-worker-0-there-is-bug/25643/16
+# https://discuss.pytorch.org/t/what-s-the-best-way-to-load-large-hdf5-data/11044/4
 class H5ODEDataset(Dataset):
-    def __init__(self, filename, len_time=100, normalize_abundance=False):
+    def __init__(self,
+                 filename,
+                 len_time=100,
+                 normalize_abundance=False,
+                 normalize_by_tff = False,
+                 multi_process_read = False
+                 ):
         self.filename = filename
         self.len_time = len_time
-        #self.sp_names = self.get_species_name()
         self.sp_names = ['H2I', 'H2II', 'HI', 'HII', 'HM', 'HeI', 'HeII', 'HeIII', 'de', 'ge']
         self.length   = self.get_length()
         self.nspecies = len(self.sp_names)
         self.taxis, self.dtf, self.endindex = self.get_timeaxis()
-        self.mh = 1.67e-24
         self.normalize_abundance = normalize_abundance
-        self.dataset= None
+        self.normalize_by_tff = normalize_by_tff
+
+        if not multi_process_read:
+            self.h5py_worker_init()
 
     def get_species_name(self):
         with h5py.File(self.filename, 'r') as f:
@@ -69,24 +78,45 @@ class H5ODEDataset(Dataset):
             logX = np.log10(X)
         return logX.mean(axis=(0,2)), logX.std(axis=(0,2))
 
-    def __getitem__(self, idx):
+#    def __getitem__(self, idx):
 #         X = np.zeros((self.nspecies, self.len_time))
-        if self.dataset is None:
-            self.dataset = h5py.File(self.filename, 'r')['data_group']
-        X = self.dataset[idx][:,:self.endindex+1]
+#        if self.dataset is None:
+#            self.dataset = h5py.File(self.filename, 'r')['data_group']
+#        X = self.dataset[idx][:,:self.endindex+1]
+#        if self.normalize_abundance:
+#            density = X[5:6,0]/0.24
+#            X[:5] /= density
+#            X[6:-1] /= density
+#        if not self.normalize_by_tff:
+#            return torch.from_numpy(self.taxis[:self.endindex+1]), torch.from_numpy(X)
+#        else:
+#            inv_tff = np.sqrt(6.67e-8* X[5:6,0]/0.24)
+#            return torch.from_numpy(self.taxis[:self.endindex+1])*inv_tff, torch.from_numpy(X)
+
+    def __getitem__(self, idx):
+        X = self.h5dataset[idx][:,:self.endindex+1]
         if self.normalize_abundance:
             density = X[5:6,0]/0.24
             X[:5] /= density
             X[6:-1] /= density
-        return torch.from_numpy(self.taxis[:self.endindex+1]), torch.from_numpy(X)
-#         with h5py.File(self.filename, 'r') as f:
-#             X = f['data_group'][idx][:,:self.endindex+1]
-#             if self.normalize_abundance:
-#                 density = X[5:6,0]/0.24
-#                 X[:5] /= density
-#                 X[6:-1] /= density
-#         return torch.from_numpy(self.taxis[:self.endindex+1]), torch.from_numpy(X)
+        if not self.normalize_by_tff:
+            return torch.from_numpy(self.taxis[:self.endindex+1]), torch.from_numpy(X)
+        else:
+            inv_tff = np.sqrt(6.67e-8* X[5:6,0]/0.24)
+            return torch.from_numpy(self.taxis[:self.endindex+1])*inv_tff, torch.from_numpy(X)
 
+    def cleanup(self):
+        self.h5file.close()
+
+    def h5py_worker_init(self):
+        self.h5file = h5py.File(self.filename, 'r', libver='latest', swmr=True)
+        self.h5dataset = self.h5file['data_group']
+        atexit.register(self.cleanup)
+
+def worker_init_fn(worker_id):
+    worker_info = torch.utils.data.get_worker_info()
+    dataset = worker_info.dataset
+    dataset.h5py_worker_init()
 
 def initialize_dataloaders(h5filename, nsamples, seed=42, test_size=0.2, batch_size=128, num_workers=40, sample_weight_file=None):
     np.random.seed(seed)
@@ -139,28 +169,111 @@ class DataPartitioner(object):
         return Partition(self.data, self.partitions[partition])
 
 
-def partition_dataset(batch_size=40):
-    """ Partitioning MNIST """
-    dataset = H5ODEDataset('../new_dd0053_chemistry_5.hdf5')
+# def partition_dataset(batch_size=40):
+#     """ Partitioning MNIST """
+#     dataset = H5ODEDataset('../new_dd0053_chemistry_5.hdf5')
 
-    np.random.seed(42)
-    nsamples = len(dataset)//500
-    subset_indexes = np.random.choice(len(dataset),nsamples)
+#     np.random.seed(42)
+#     nsamples = len(dataset)//500
+#     subset_indexes = np.random.choice(len(dataset),nsamples)
 
-    idx_train, idx_test = train_test_split(subset_indexes, test_size=0.2, random_state=42)
-    # idx_train, idx_test = train_test_split(np.arange(1000), test_size=0.2, random_state=42)
+#     idx_train, idx_test = train_test_split(subset_indexes, test_size=0.2, random_state=42)
+#     # idx_train, idx_test = train_test_split(np.arange(1000), test_size=0.2, random_state=42)
 
-    ds_train = Subset(dataset, idx_train)
-    ds_test  = Subset(dataset, idx_test)
+#     ds_train = Subset(dataset, idx_train)
+#     ds_test  = Subset(dataset, idx_test)
 
-    size = dist.get_world_size()
-    bsz = batch_size // size
-    partition_sizes = [1.0 / size for _ in range(size)]
-    partition = DataPartitioner(ds_train, partition_sizes)
-    partition = partition.use(dist.get_rank())
-    train_set = torch.utils.data.DataLoader(
-        partition, batch_size=bsz, shuffle=True)
-    return train_set, bsz
+#     size = dist.get_world_size()
+#     bsz = batch_size // size
+#     partition_sizes = [1.0 / size for _ in range(size)]
+#     partition = DataPartitioner(ds_train, partition_sizes)
+#     partition = partition.use(dist.get_rank())
+#     train_set = torch.utils.data.DataLoader(
+#         partition, batch_size=bsz, shuffle=True
+#     return train_set, bsz
+
+class H5ODEDatasetParallel(Dataset):
+    def __init__(self,
+                 filename,
+                 len_time=100,
+                 normalize_abundance=False,
+                 normalize_by_tff = False,
+                 ):
+        self.filename = filename
+        self.len_time = len_time
+        self.sp_names = ['H2I', 'H2II', 'HI', 'HII', 'HM', 'HeI', 'HeII', 'HeIII', 'de', 'ge']
+        self.length   = self.get_length()
+        self.nspecies = len(self.sp_names)
+        self.normalize_abundance = normalize_abundance
+        self.normalize_by_tff = normalize_by_tff
+
+    def get_species_name(self):
+        with h5py.File(self.filename, 'r') as f:
+            sp_paths = f.attrs['data_columns']
+        return list(sorted(sp_paths))
+
+    def get_length(self):
+        with h5py.File(self.filename, 'r') as f:
+            data_length = f['data_group'].shape[0]
+        return int(data_length)
+
+    def normalize(self, data, ith_sp):
+        # min-max normalization
+        return (np.log10(data) - self.min_list[ith_sp]) / (self.max_list[ith_sp] - self.min_list[ith_sp])
+
+    def plot_normalize_data(self, idx):
+        tdata, Xdata = self[idx]
+        f,ax = plt.subplots()
+        for i, s in enumerate(self.sp_names):
+            ax.loglog(tdata, Xdata[i]/ Xdata[i,0], label=s)
+        plt.legend()
+        return f
+
+    def __len__(self):
+        return self.length
+
+    def get_group_stats(self):
+        with h5py.File(self.filename, 'r') as f:
+            X = f['data_group'][:,:,:self.endindex+1] # n_init, nspecies, ntimes
+            if self.normalize_abundance:
+                density = X[:,5:6,0:1]/0.24
+                X[:,:5,:] /= density
+                X[:,6:-1,:] /= density
+            logX = np.log10(X)
+        return logX.mean(axis=(0,2)), logX.std(axis=(0,2))
+
+    def get_timeaxis(self, idx):
+        dt  = self.h5dtf[idx] / 1e4
+        dtf = self.h5dtf[idx]
+        taxis = (np.cumsum([0] + list(1.1**np.arange(100))))*dt
+
+        idx = np.where(taxis<=dtf)[0][-1]+1
+        taxis[idx] = dtf
+        taxis[idx+1:] = 0.0
+        return taxis, dtf,  idx
+
+    def __getitem__(self, idx):
+        taxis, dtf,  endindex = self.get_timeaxis(idx)
+        X                     = self.h5dataset[idx][:,:endindex+1]
+
+        if self.normalize_abundance:
+            density = X[5:6,0]/0.24
+            X[:5] /= density
+            X[6:-1] /= density
+        if not self.normalize_by_tff:
+            return torch.from_numpy(taxis[:endindex+1]), torch.from_numpy(X)
+        else:
+            inv_tff = np.sqrt(6.67e-8* X[5:6,0]/0.24)
+            return torch.from_numpy(taxis[:endindex+1])*inv_tff, torch.from_numpy(X)
+
+    def cleanup(self):
+        self.h5dataset.close()
+    def h5py_worker_init(self):
+        self.h5file = h5py.File(self.filename, 'r', libver='latest', swmr=True)
+        self.h5dataset = self.h5file['data_group']
+        self.h5dtf     = self.h5file['dtf']
+        atexit.register(self.cleanup)
+
 
 
 """ Gradient averaging. """
