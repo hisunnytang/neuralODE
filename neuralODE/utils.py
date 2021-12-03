@@ -9,7 +9,7 @@ import time
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
-from torch.utils.data import Dataset, DataLoader, Subset,WeightedRandomSampler, ConcatDataset, SubsetRandomSampler
+from torch.utils.data import Dataset, DataLoader, Subset,WeightedRandomSampler, ConcatDataset, SubsetRandomSampler, Sampler
 from sklearn.model_selection import train_test_split
 from numpy.random import default_rng
 
