@@ -18,7 +18,9 @@ class NewLatentODEfunc(nn.Module):
                  data_std=None,
                  data_mask=None,
                  ode_final_activation=None,
-                 ae_type = 'ICAE'):
+                 ae_type = 'ICAE',
+                 map_H2 = None,
+                 nlayers_ode=None):
         super(NewLatentODEfunc, self).__init__()
 
         AE= {"ICAE":    ICGuidedAutoEncoder,
@@ -33,11 +35,15 @@ class NewLatentODEfunc(nn.Module):
                                         activation_fn=activation_fn,
                                         data_mean=data_mean,
                                         data_std=data_std,
-                                        data_mask=data_mask)
+                                        data_mask=data_mask,
+                                        map_H2=map_H2)
+
+        if nlayers_ode is None:
+            nlayers_ode = nlayers
 
 
         self.rhs_func = ODEFunc(latent_dim,
-                                nhidden, nlayers=nlayers,
+                                nhidden, nlayers=nlayers_ode,
                                 activation_fn=activation_fn,
                                 final_activation =ode_final_activation)
 
@@ -88,7 +94,8 @@ class NewLatentODEfunc(nn.Module):
         loss_recon = self.reconstruction_loss(x, x0, z0)
         return x_pred, loss_path, loss_recon
 
-    def forward_time_batch(self, t, x0, X_truth, obs_indx, taxis_indx):
+    def forward_time_batch(self, t, x0, X_truth, obs_indx, taxis_indx,
+                           get_pct_diff=None):
         z0     = self.encode_initial_condition(x0)
         z_path = self.integrate_ODE(t, z0)
         x_pred = self.decode_path(z_path, z0, x0)
@@ -99,9 +106,19 @@ class NewLatentODEfunc(nn.Module):
         pred_x = self.autoencoder.enc.log_normalize(xpred_sort)
         loss_path = ((pred_x - real_x)).abs().mean()
 
+        if get_pct_diff:
+            real_x = torch.log(X_truth)
+            pred_x = torch.log(xpred_sort)
+            loss_path = ((pred_x - real_x)/ real_x).abs().mean()
+
+
         # now reconstruction loss
-        reconstruc_x = self.autoencoder(X_truth)
+        reconstruct_x = self.autoencoder(X_truth, x0= x0[obs_indx])
         loss_recon =  ((self.autoencoder.enc.log_normalize(reconstruct_x) - real_x)).abs().mean()
+
+        if get_pct_diff:
+            loss_recon =  ((torch.log(reconstruct_x) - real_x)/ real_x).abs().mean()
+
         return xpred_sort, loss_path, loss_recon
 
 
