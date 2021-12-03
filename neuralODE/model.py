@@ -23,19 +23,24 @@ class MLP(nn.Module):
     def __init__(self, input_dim, nhidden, output_dim, nlayers=3, activation_fn = "Tanh", final_activation=None, scale_output=None):
         super(MLP, self).__init__()
 
-        act_fn = getattr(nn, activation_fn)
-        assert act_fn.__module__ == 'torch.nn.modules.activation', f'{activation_fn} is not a module of torch.nn.modules.activation'
-        if final_activation is not None:
-            final_act_fn = getattr(nn, final_activation)
-            assert final_act_fn.__module__ == 'torch.nn.modules.activation', f'{final_activation_fn} is not a module of torch.nn.modules.activation'
+        # just One simple linear layer
+        if nlayers == 1:
+            self.layers = [nn.Linear(input_dim, output_dim)]
+
+        else:
+            act_fn = getattr(nn, activation_fn)
+            assert act_fn.__module__ == 'torch.nn.modules.activation', f'{activation_fn} is not a module of torch.nn.modules.activation'
+            if final_activation is not None:
+                final_act_fn = getattr(nn, final_activation)
+                assert final_act_fn.__module__ == 'torch.nn.modules.activation', f'{final_activation_fn} is not a module of torch.nn.modules.activation'
 
 
 
-        self.layers = [nn.Linear(input_dim, nhidden), act_fn()]
-        for i in range(nlayers-2):
-            self.layers.append(nn.Linear(nhidden, nhidden))
-            self.layers.append(act_fn())
-        self.layers.append(nn.Linear(nhidden, output_dim))
+            self.layers = [nn.Linear(input_dim, nhidden), act_fn()]
+            for i in range(nlayers-2):
+                self.layers.append(nn.Linear(nhidden, nhidden))
+                self.layers.append(act_fn())
+            self.layers.append(nn.Linear(nhidden, output_dim))
 
         if scale_output is not None:
             assert final_activation is None, 'final activation has to be none if we scale the output with scaling factor'
