@@ -1,17 +1,18 @@
 #include "torch_EncoderDecoder.h"
 
 
-EncoderDecoder::EncoderDecoder(int batch_size, int num_species, int latent_dim, std::string filelocation){
+EncoderDecoder::EncoderDecoder(int batch_size, int num_species, int latent_dim, double Tend, std::string filelocation){
     bsz      = batch_size;
     nspecies = num_species;
     nlatent  = latent_dim;
+    T1 = Tend;
 
     // load models
     file_location = filelocation;
-    std::string rhs_file = filelocation +"/neuralODE_rhs.ptc";
-    std::string jac_file = filelocation + "/neuralODE_jac.ptc";
-    std::string encoder_file = filelocation + "/neuralODE_encoder.ptc";
-    std::string decoder_file = filelocation + "/neuralODE_decoder.ptc";
+    std::string rhs_file = filelocation +"/rhs_module.pt";
+    std::string jac_file = filelocation + "/jac_module.pt";
+    std::string encoder_file = filelocation + "/encoder_module.pt";
+    std::string decoder_file = filelocation + "/decoder_module.pt";
 
 
     model_rhs = torch::jit::load(rhs_file);
@@ -31,11 +32,12 @@ EncoderDecoder::EncoderDecoder(int batch_size, int num_species, int latent_dim, 
     latent_buffer    = (double *) malloc(sizeof(double)*bsz* nspecies);
     init_abundance_buffer = (double *) malloc(sizeof(double)*bsz* nspecies);
     init_latent_buffer    = (double *) malloc(sizeof(double)*bsz* nlatent);
+    invtff_buffer = (double *) malloc(sizeof(double)*bsz);
 }
 
 int EncoderDecoder::LoadAbundanceBuffer(std::string ic_file, unsigned long idx_start, int nsamples){
     readdata_from_hdf5(ic_file, nsamples, idx_start, &abundance_buffer[0]);
-    abundance_transform(nsamples, &abundance_buffer[0]);
+    //abundance_transform(nsamples, &abundance_buffer[0]);
     std::memcpy(init_abundance_buffer, abundance_buffer, sizeof(double)*nspecies*nsamples);
     return 0;
 }
@@ -56,6 +58,17 @@ int abundance_transform(int nsamples, double *abundance){
     return 0;
 }
 
+int EncoderDecoder::EvaluateInvTff(int nsamples, double T1, double *abundance_vector){
+    double current_density;
+    for (int i = 0; i < nsamples; i++){
+        current_density = abundance_vector[ (i) * nspecies + idx_helium ]/ frac_helium;
+        invtff_buffer[i]   = T1*pow(current_density*G, 0.5);
+        //fprintf(stderr, "invtff[%d] = %0.5g\n", i, invtff_buffer[i]);
+    }
+    return 0;
+}
+
+
 int EncoderDecoder::EncodeToLatent(int nsamples, double *abundance_vector){
     // the goal of this function is to store the abundance vector, store its latent in the buffer
     // - populate init_abundance_buffer, init_latent_buffer
@@ -65,7 +78,8 @@ int EncoderDecoder::EncodeToLatent(int nsamples, double *abundance_vector){
     // 1. Copy the abundance to buffer
     std::memcpy(init_abundance_buffer, abundance_vector, (sizeof(double)* nsamples * nspecies));
     // 2. Apply in-place transform to the abundance-buffer
-    abundance_transform(nsamples, &init_abundance_buffer[0]);
+    //abundance_transform(nsamples, &init_abundance_buffer[0]);
+    EvaluateInvTff(nsamples, T1, &abundance_vector[0]);
 
 //    for (int k = 0; k < 10; k++)
 //        printf("after init_abund[%d] = %0.5g\n", k, init_abundance_buffer[k]);

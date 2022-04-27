@@ -134,7 +134,7 @@ int main()
     torch::set_num_threads(40);
     //ParallelReadHDF5();
     std::string filelocation = "/mnt/gv0/homes/kwoksun2/campus_cluster/test-enzo-dengo/cvode_enzo_64_1e-6";
-    std::string ic_file = filelocation+"/new_dd0053_chemistry_2.hdf5"; 
+    std::string ic_file = filelocation+"/new_dd0053_chemistry_3.hdf5"; 
 
     int batch_size = 2048;
     int nchem      = 10;
@@ -146,9 +146,9 @@ int main()
     double end = omp_get_wtime();
     printf("DataLoader took %f seconds\n", end - start);
 
-    int nloops = 1;
+    int nloops = 200;
 
-    double T1 = 1;
+    double T1 = 1e14;
     double reltol = 1e-5;
     int nspecies = 10;
 
@@ -158,9 +158,10 @@ int main()
         unsigned long i, id, nthrds;
         double *ic_ptr;
     
-        EncoderDecoder encdec = EncoderDecoder(batch_size, nspecies, latent_dim, filelocation);
-        user_data      data   = initialize_user_data(filelocation, batch_size, latent_dim);
-        LatentSolver   s      = LatentSolver(batch_size, latent_dim, reltol, encdec.get_init_latent_ptr(), (void*) &data);
+        EncoderDecoder encdec = EncoderDecoder(batch_size, nspecies, latent_dim, T1, model_location);
+        user_data      data   = initialize_user_data(model_location, batch_size, latent_dim);
+        LatentSolver   s      = LatentSolver(batch_size, latent_dim, reltol, encdec.get_init_latent_ptr(), encdec.get_invtff_ptr(), (void*) &data);
+        
 
         id     = omp_get_thread_num();
         nthrds = omp_get_num_threads();
@@ -172,7 +173,7 @@ int main()
             ic_ptr = &(field_data.input_data[id*batch_size*nspecies]);
         
             encdec.EncodeToLatent(batch_size, ic_ptr);
-            printf("Encodeee::: getting[%d] = %lu\n", id, idx_start);
+            //printf("Encodeee::: getting[%d] = %lu\n", id, idx_start);
             //std::cout << "pointer to latent" << Encoder_Decoder->get_init_latent_ptr()<< std::endl;
             
             //std::cout << "pointer to EncDec" << &tmp2 << &tmp1 << std::endl;
@@ -194,7 +195,7 @@ int main()
     }
 
     double end2 = omp_get_wtime();
-    printf("Solver loop took %f seconds; percells %0.5g\n", end2 - start, (end2-start)/ batch_size/ nloops );
+    printf("Solver loop took %f seconds; percells %0.5g\n", end2 - end, (end2-end)/ batch_size/ nloops );
 
     return 0;
 

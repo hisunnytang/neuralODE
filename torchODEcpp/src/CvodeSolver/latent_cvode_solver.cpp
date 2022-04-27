@@ -8,8 +8,8 @@ user_data initialize_user_data( std::string filelocation, int bsz, int nspecies 
 
     torch::NoGradGuard no_grad;
 
-    std::string rhs_file = filelocation +"/neuralODE_rhs.ptc";
-    std::string jac_file = filelocation + "/neuralODE_jac.ptc";
+    std::string rhs_file = filelocation +"/rhs_module.pt";
+    std::string jac_file = filelocation + "/jac_module.pt";
 
     udata.model_rhs = torch::jit::load(rhs_file);
     udata.model_rhs.eval();
@@ -20,6 +20,8 @@ user_data initialize_user_data( std::string filelocation, int bsz, int nspecies 
 
     std::vector<torch::jit::IValue> input_tensors;
     input_tensors.reserve(1);
+    std::vector<torch::jit::IValue> tmult;
+    tmult.reserve(1);
 
     return udata;
 }
@@ -46,8 +48,8 @@ LatentSolver::~LatentSolver(){
 
 
 // class initializer for the solver object
-LatentSolver::LatentSolver(int batch_size, int num_species, double relative_tolerance, double *data_pointer, void* udata)
-    : bsz(batch_size), nspecies(num_species), reltol(relative_tolerance), data_ptr(data_pointer) 
+LatentSolver::LatentSolver(int batch_size, int num_species, double relative_tolerance, double *data_pointer, double *tmult_pointer, void* udata)
+    : bsz(batch_size), nspecies(num_species), reltol(relative_tolerance), data_ptr(data_pointer)
 {
     int flag;
 
@@ -73,9 +75,12 @@ LatentSolver::LatentSolver(int batch_size, int num_species, double relative_tole
     
     // read the data into the N_Vector space
     this->LoadN_Vector(bsz, data_ptr);
-        
+
+    // initialize tmult 
+
     // point the tensor to the memory space of the cvode internal solver
     mydata->input_tensors.push_back(torch::from_blob(latent_ptr, {batch_size, num_species}, torch::kFloat64));
+    mydata->input_tensors.push_back(torch::from_blob(tmult_pointer, {batch_size, 1}, torch::kFloat64));
     cvode_mem = CVodeCreate(CV_BDF);
 
 
