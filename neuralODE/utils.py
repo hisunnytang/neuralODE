@@ -67,6 +67,42 @@ def worker_init_fn(worker_id):
     ds = worker_info.dataset
     ds.h5py_worker_init()
 
+def collate_normed_ODE(data):
+    t, X = zip(*data)
+    X = torch.stack(X)
+    t = torch.stack(t)
+    mult = t[:,-1:]
+    return t, X, mult
+
+def collate_multi_paths(data):
+    tiny = 1e-10
+    ts, Xs = zip(*data)
+
+    Xall = torch.stack(Xs)
+    tall = torch.stack(ts)
+
+    bsz, nspecies, ntime = Xall.shape
+
+    tflat = tall.flatten()
+    tindx = torch.argsort(tflat)
+    tunique = torch.unique(tflat)
+
+    # where each observations is at on its 'original time axis' [0:74]
+    taxis_indx = torch.from_numpy(np.digitize(tflat, tunique-tiny))[tindx]-1
+    # time ordered observations index
+    obs_indx = torch.tensor([[i]*ntime for i in range(bsz)]).flatten()[tindx]
+
+    # batch ground truths,
+    # time ordered with interwinding observations over different batch element
+    # the corresponding actual observeed batch index is given by obs_indx
+    X_truth = Xall.permute(0,2,1).reshape(-1,10)[tindx]
+    t_X     = tflat[tindx]
+
+    X0 = Xall[:,:,0]
+
+    return tunique, X0, X_truth, obs_indx, taxis_indx, t_X
+
+
 
 def prepare_parallel_dataloader(filename='output_file.h5',
                                train_proportion=0.1,
@@ -75,6 +111,7 @@ def prepare_parallel_dataloader(filename='output_file.h5',
                                normalize_abundance=True,
                                normalize_by_tff = False,
                                sample_weight_file=None,
+                                collate_fn=collate_multi_paths
                                 ):
 
     ds = H5ODEDatasetParallel(filename,
@@ -83,7 +120,7 @@ def prepare_parallel_dataloader(filename='output_file.h5',
 
 
     nsamples = int( len(ds)* train_proportion )
-    subset_indexes = rng.choice(len(ds),nsamples)
+    subset_indexes = rng.choice(len(ds),nsamples, replace=False)
 
     idx_train, idx_val_test = train_test_split(subset_indexes, test_size=0.2, random_state=RNG_SEED)
     idx_val  , idx_test     = train_test_split(idx_val_test, test_size=0.5, random_state=RNG_SEED)
@@ -91,7 +128,14 @@ def prepare_parallel_dataloader(filename='output_file.h5',
     if sample_weight_file is not None:
         weights = np.load(sample_weight_file)
         assert len(weights) == len(ds), f"weight file {sample_weight_file} should have the same number of datapoints as dataset {h5filename}"
-        weights = torch.from_numpy(weights[idx_train])
+
+        # this is FATAL error here
+        # we didnt subset sample the train dataset
+        # since torch.utils.data.Subset does not work well with our dataset obj
+        # BUT we can mask the val, and test index by zeros
+        weights[idx_val_test] = 0.0
+
+        weights = torch.from_numpy(weights)
         train_sampler = WeightedRandomSampler(weights, len(idx_train))
     else:
         train_sampler = SubsetRandomSampler(idx_train)
@@ -102,20 +146,20 @@ def prepare_parallel_dataloader(filename='output_file.h5',
                         batch_size=batch_size,
                         num_workers=num_workers,
                         worker_init_fn = worker_init_fn,
-                        collate_fn=collate_multi_paths,
+                        collate_fn=collate_fn,
                           pin_memory=True,
                         sampler=train_sampler)
     dl_val  = DataLoader(ds,
                         batch_size=batch_size,
                         num_workers=num_workers,
                         worker_init_fn = worker_init_fn,
-                        collate_fn=collate_multi_paths,
+                        collate_fn=collate_fn,
                         sampler=SequentialSubsetSampler(idx_val))
     dl_test  = DataLoader(ds,
                         batch_size=batch_size,
                         num_workers=num_workers,
                         worker_init_fn = worker_init_fn,
-                        collate_fn=collate_multi_paths,
+                        collate_fn=collate_fn,
                         sampler=SequentialSubsetSampler(idx_test))
     return dl_train, dl_test, dl_val
 
@@ -216,9 +260,13 @@ def prepare_dataset(dataname='new_dd0053_chemistry_5.hdf5',
         train_sampler = None
         shuffle = True
 
-    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, sampler=train_sampler)
-    dl_test  = DataLoader(ds_test,  batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    dl_val  = DataLoader(ds_val,  batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    dl_train = DataLoader(ds_train, batch_size=batch_size, shuffle=shuffle,
+                          num_workers=num_workers, sampler=train_sampler,
+                          drop_last=True)
+    dl_test  = DataLoader(ds_test,  batch_size=batch_size, shuffle=False,
+                          num_workers=num_workers, drop_last=True)
+    dl_val  = DataLoader(ds_val,  batch_size=batch_size, shuffle=False,
+                         num_workers=num_workers, drop_last=True)
 
     return dl_train, dl_test, dl_val
 
@@ -234,7 +282,7 @@ def prepare_dataloaders(filenames, hyperparams, sample_score_file=None,
     assert len(sample_weight_file) == len(filenames)
 
     dl_train, dl_test, dl_val = [], [], []
-    for fn, score in zip(filenames, sample_score_file, sample_weight_file):
+    for fn, score, weight in zip(filenames, sample_score_file, sample_weight_file):
         dltrain, dltest, dlval =  prepare_dataset(dataname=fn,
                                                    train_proportion=hyperparams['train_proportion'],
                                                    normalize_abundance=hyperparams['normalize_abundance'],
@@ -275,34 +323,6 @@ def plot_example(model, t, X, index=None, nlines=6, axes=None, field="data"):
         plt.tight_layout()
     return axes
 
-
-def collate_multi_paths(data):
-    tiny = 1e-10
-    ts, Xs = zip(*data)
-
-    Xall = torch.stack(Xs)
-    tall = torch.stack(ts)
-
-    bsz, nspecies, ntime = Xall.shape
-
-    tflat = tall.flatten()
-    tindx = torch.argsort(tflat)
-    tunique = torch.unique(tflat)
-
-    # where each observations is at on its 'original time axis' [0:74]
-    taxis_indx = torch.from_numpy(np.digitize(tflat, tunique-tiny))[tindx]-1
-    # time ordered observations index
-    obs_indx = torch.tensor([[i]*ntime for i in range(bsz)]).flatten()[tindx]
-
-    # batch ground truths,
-    # time ordered with interwinding observations over different batch element
-    # the corresponding actual observeed batch index is given by obs_indx
-    X_truth = Xall.permute(0,2,1).reshape(-1,10)[tindx]
-    t_X     = tflat[tindx]
-
-    X0 = Xall[:,:,0]
-
-    return tunique, X0, X_truth, obs_indx, taxis_indx, t_X
 
 
 def compute_log_difference(X,X_pred, mean=True):

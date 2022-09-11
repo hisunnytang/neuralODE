@@ -276,6 +276,7 @@ if __name__ == "__main__":
     hyperparams['data_std']   = std
     hyperparams['data_mask']  = mask
     hyperparams['nhidden']  = 64
+    hyperparams['train_proportion']  = 1
 
     # initialize dataloaders
     filenames = ['new_dd0053_chemistry_3.hdf5', 'new_dd0053_chemistry_4.hdf5', 'new_dd0053_chemistry_5.hdf5']
