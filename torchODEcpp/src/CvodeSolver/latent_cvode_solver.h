@@ -27,6 +27,7 @@ struct user_data{
     torch::jit::script::Module model_decoder;
 
     std::vector<torch::jit::IValue> input_tensors;
+    std::vector<torch::jit::IValue> tmult;
 };
 
 
@@ -48,7 +49,7 @@ class LatentSolver{
         double *latent_ptr;
 
     public:
-        LatentSolver(int batch_size, int num_species, double reltol, double *data_pointer, void* udata);
+        LatentSolver(int batch_size, int num_species, double reltol, double *data_pointer, double *tmult_pointer, void* udata);
         ~LatentSolver();
         int _RunSolver(double tout);
         int LoadN_Vector(int nsamples, double *latent_z_ptr);
