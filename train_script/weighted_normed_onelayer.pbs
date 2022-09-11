@@ -1,0 +1,10 @@
+#!/bin/bash
+#PBS -k o
+#PBS -N weighted_full_1layer_tff
+#PBS -l nodes=nano7:ppn=1,walltime=96:00:00
+#PBS -j oe
+
+source ~/anaconda3/etc/profile.d/conda.sh
+cd $PBS_O_WORKDIR
+conda activate pytorch
+python train_batchtime.py --norm_tff --nhidden 32 --t_mult 1.0 --ae_type PlainAE --nlayers 1 --max_time 1.0 --train_proportion 1.0 --latent_dim 3 --norm_abund
